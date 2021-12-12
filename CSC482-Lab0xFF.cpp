@@ -10,9 +10,10 @@
 enum Algs {
     F_BRUTEFORCE,
     F_GREEDY,
-    F_ANTCOLONY
+    F_ANTCOLONY,
+    F_ALL
 };
-
+    
 typedef struct Node {
     double x;
     double y;
@@ -20,9 +21,14 @@ typedef struct Node {
 
 #define VERBOSE false
 
-const int test = F_BRUTEFORCE;
+
+const int TEST = F_BRUTEFORCE;
+const int TIME_STEPS = 10000;
+const int NUM_ANTS = 1000;
+const float DECAY = .01;
+const float PHEROMONE_FACTOR = 1;
 long long unsigned int busyCount;
-const long long int N_max = 10000; // adjust as needed, keep small for debugging
+const long long int N_max = 1000; // adjust as needed, keep small for debugging
 const int N = 10;
 const int C_MAXVAL = 10;
 double costMatrix[N_max][N_max] = { 0 };    /* Matrix associated with the weight of a path */
@@ -30,6 +36,7 @@ int indexes[N_max] = { 0 };                 /* array associated with tracking in
 Node coords[N_max] = { 0 };                 /* array for tracking X, Y values for Euclidean costMatrix */
 double shortestPathCost = -1;               /* tracks the shortest path in a given matrix */
 int shortestPath[N_max] = { 0 };
+
 
 using namespace std;
 
@@ -69,7 +76,6 @@ This function takes three parameters:
 3. Ending index of the string. */
 void TspBruteForce(int indexes[N_max], double costMatrix[][N_max], int l, int r)
 {
-
     int i;
     if (l == r) {
         double cost = 0;
@@ -108,18 +114,20 @@ void TspBruteForce(int indexes[N_max], double costMatrix[][N_max], int l, int r)
 
 void TspGreedy(double costMatrix[][N_max], int numV)
 {
-    /* find shortest, check if index is already used, if not use as next index
-       
+    /*
+        find shortest, check if index is already used, if not use as next index
     */
+
     double smallest = C_MAXVAL + 1;
     int index = 0;
     int tempIndex = 0;
-    int visited[N_max] = { 0 };
-    int path[N_max] = { 0 };
+    int visited[numV+1] = { 0 };
+    int path[numV+1] = { 0 };
+    
+    
     visited[0]++;
 
-
-    for (long long int j = 0; j < numV-1; j++) {
+    for (long long int j = 0; j < numV - 1; j++) {
         for (long long int k = 0; k < numV; k++) {
             if (k != index) {
                 if (costMatrix[index][k] < smallest && visited[k] == 0) {
@@ -130,26 +138,174 @@ void TspGreedy(double costMatrix[][N_max], int numV)
         }
         index = tempIndex;
         visited[index]++;
-        path[j+1] = index;
+        path[j + 1] = index;
         smallest = C_MAXVAL + 1;
-        printf("Selected: %d\n", index);
-        printf("Visited: ");
-        for (int l = 0; l < numV; l++) {
-            if (visited[l] > 0)
-                printf("%d, ", l);
-        }
     }
-    printf("Generation done. Final path: ");
-    for (int k = 0; k < numV; k++)
-        printf("%d -> ", path[k]);
-    printf("0");
-    printf("\n\n");
+    double cost = 0;
+    int pathIndex = 0;
+    int acc = 1;
+    while (acc < numV+1) {
+        cost += costMatrix[pathIndex][path[acc]];
+        pathIndex = path[acc];
+        acc++;   
+    }
+    cost += costMatrix[pathIndex][0];
 
+    printf("[Greedy] Best path cost: %f\n", cost);
+    printf("[Greedy] Best path: ");
+    for (int l = 0; l < numV; l++)
+        if (visited[l] > 0)
+            printf("%d -> ", path[l]);
+    printf("0\n");
 }
 
-void TspAntColony(void)
-{
 
+void TspAntColony(double costMatrix[][N_max], int timeSteps, int numV, float pheromoneFactor, int m, float decayFactor)
+{
+    // 1/edgeweight percent chance of taking edge, per ant
+    // after ant visits all nodes, lays down a pheremone factor equal to ((1 / (path cost)) * pFactor)
+    // next Time Step, decay pheremone by factor of 10%, then add to pheremone matrix (((1 + pheremones) / (path cost)) * pFactor)
+    // if best recorded path doesn't change for X time steps, we can terminate the algorithm and return the shortest path found.
+    
+
+    int visited[numV] = { 0 };
+    double bestPathCost = 0;
+    double totalAttraction = 0;
+    double cummulativeProbability = 0;
+    double minPathCostSoFar = 0;
+    int minPath[numV] = { 0 };
+    int bestPath[numV] = { 0 };
+    int availableEdges[numV] = { 0 };
+    int availableCnt = numV;
+    double pathCost = 0;
+    const int homeNode = 0;
+    int currentNode = 0;
+    int nextNode = 0;
+    int currentPath[numV] = { 0 };
+    double edgeSelectionProbability = 0;
+    int maxUnchangedTimeSteps = 20;
+    int unchangedTimeSteps = 0;
+
+    double pheromoneMatrix[numV][numV] = { 0 };
+    double newPheromoneMatrix[numV][numV] = { 0 };
+   
+
+
+    for (int step = 0; step < timeSteps; step++) {
+        if (unchangedTimeSteps > maxUnchangedTimeSteps)
+            break;
+
+        /* run for every ant */
+       // memset(&newPheromoneMatrix, 0, sizeof(newPheromoneMatrix));
+        for (int l = 0; l < numV+1; l++)
+            for (int r = 0; r < numV+1; r++)
+                newPheromoneMatrix[l][r] = 0; 
+
+      //  printMatrix(costMatrix, numV);
+        for (int j = 0; j < m; j++) {
+
+            pathCost = 0;
+            currentPath[0] = homeNode;
+
+            /* zero out array */
+            memset(visited, 0, sizeof(visited));        
+            visited[homeNode] = 1;
+            
+           // for (int k = 1; k < numV; k++) {
+            if (step > 0) {
+                for (int k = 1; k < numV; k++) {
+                    currentNode = currentPath[k - 1];
+                    totalAttraction = 0;
+                    for (nextNode = 0; nextNode < numV; nextNode++) {
+                        if (!visited[nextNode] && nextNode != currentNode) {
+                            if (pheromoneMatrix[currentNode][nextNode] > 0.0 && costMatrix[currentNode][nextNode] > 0.0) {
+                                totalAttraction += (1 + pheromoneMatrix[currentNode][nextNode]) / costMatrix[currentNode][nextNode];
+                             //   printf("(1 * (%.50f)) / %f\n", pheromoneMatrix[currentNode][nextNode], costMatrix[currentNode][nextNode]);
+                            }
+                      
+                            // printf("NextNode: %d, CurrentNode: %d\n", nextNode, currentNode);
+                        }
+                    }
+                    // probability of choosing an edge = attraction / sum of attraction of all remaining available edges
+                    double q = (double)rand() / (double)RAND_MAX;
+                    cummulativeProbability = 0;
+
+                    for (nextNode = 0; nextNode < numV; nextNode++) {
+                        if (!visited[nextNode] && nextNode != currentNode) {
+                      /*      printf("Cost matrix at (%d,%d): %f\n", currentNode, nextNode, costMatrix[currentNode][nextNode]);
+                            printf("Total attraction: %f\n", totalAttraction);
+                            printf("pheromoneMatrix: %f\n", pheromoneMatrix[currentNode][nextNode]); */
+                            if (pheromoneMatrix[currentNode][nextNode] > 0.0 && costMatrix[currentNode][nextNode] > 0.0 && totalAttraction > 0) {
+                                edgeSelectionProbability = ((1 + pheromoneMatrix[currentNode][nextNode]) / costMatrix[currentNode][nextNode]) / totalAttraction;
+                             //   printf("EdgeProb: %f\n", edgeSelectionProbability);
+                                cummulativeProbability += edgeSelectionProbability;
+                            } else {
+                                edgeSelectionProbability = (1 / costMatrix[currentNode][nextNode]) / totalAttraction;
+                                cummulativeProbability += edgeSelectionProbability;
+                            }
+
+                            
+                        }
+                        if (q < cummulativeProbability) {
+                     //       printf("Q: %f, cumProb: %f\n", q, cummulativeProbability);
+                            break;
+                        }
+                    }
+
+                    currentPath[k] = nextNode;
+                    visited[nextNode] = 1;
+                    pathCost += costMatrix[currentNode][nextNode];
+                }
+
+            }
+
+            pathCost += costMatrix[nextNode][homeNode];
+
+
+            if (pathCost < minPathCostSoFar || minPathCostSoFar == 0) {
+                minPathCostSoFar = pathCost;
+                for (int k = 0; k < numV; k++)
+                    bestPath[k] = currentPath[k];
+            } else {
+                unchangedTimeSteps++;
+            }
+
+            // decay matrix
+            // add new pheremone for path
+            for (int n = 0; n < numV; n++) {
+                currentNode = currentPath[n];
+                nextNode = currentPath[(n + 1) % numV];
+        /*      printf("Current Node: %d, Next node: %d, n: %d\n", currentNode, nextNode, n);
+                printf("newPheromoneMatrix[current][next] = (%f)\n", newPheromoneMatrix[currentNode][nextNode]); */
+                newPheromoneMatrix[currentNode][nextNode] = (newPheromoneMatrix[currentNode][nextNode] + pheromoneFactor) / pathCost;
+             //   printf("Aftermath: newPheromoneMatrix[current][next] = (%f)\n", newPheromoneMatrix[currentNode][nextNode]);
+
+
+            }
+         
+        }
+        for (int k = 0; k < numV; k++) {
+            for (int h = 0; h < numV; h++) {
+              /*  printf("\nIndex: (% d, % d)\n", k, h);
+                printf("pheromoneMatrix[k][h] = %f\n", pheromoneMatrix[k][h]);
+                printf("TEST1: %f\n", pheromoneMatrix[k][h] = pheromoneMatrix[k][h] * decayFactor);
+                printf("TEST2: %f\n\n", pheromoneMatrix[k][h] = pheromoneMatrix[k][h] + newPheromoneMatrix[k][h]); */
+
+                pheromoneMatrix[k][h] = pheromoneMatrix[k][h] * decayFactor;
+                pheromoneMatrix[k][h] = pheromoneMatrix[k][h] + newPheromoneMatrix[k][h];
+            }
+        }
+/*
+        printf("Path cost: %f\n", pathCost);
+        for (int p = 0; p < numV + 1; p++)
+            printf("%d -> ", currentPath[p]); */
+
+    }
+    printf("[Ant Colony] Best path cost: %f\n", minPathCostSoFar);
+    printf("[Ant Colony] Best path: ");
+    for (int p = 0; p < numV; p++)
+        printf("%d -> ", bestPath[p]);
+    printf("%d\n", 0);
 }
 
 void GenerateRandomCostMatrix(double costMatrix[][N_max], int numV, int maxValue)
@@ -241,7 +397,7 @@ int main(int argc, char** argv) {
 
 
 
-            switch (test) {
+            switch (TEST) {
             case F_BRUTEFORCE:
                 for (int k = 0; k < n - 1; k++) {
                     indexes[k] = k + 1;
@@ -260,12 +416,37 @@ int main(int argc, char** argv) {
                     printf("Shortest Path Cost: %f\n", shortestPathCost);
                 }
                 shortestPathCost = -1;
+                memset(shortestPath, 0, sizeof(shortestPath));
                 break;
             case F_GREEDY:
                 TspGreedy(costMatrix, n);
                 break;
             case F_ANTCOLONY:
-                TspAntColony();
+                TspAntColony(costMatrix, TIME_STEPS, n, PHEROMONE_FACTOR, NUM_ANTS, DECAY);
+                break;
+            case F_ALL:
+
+                /* This case only exists for side by side algorithm comparisons */
+                GenerateRandomEuclideanCostMatrix(costMatrix, n, C_MAXVAL);
+
+                printf("+-------------------------\n");
+                TspAntColony(costMatrix, TIME_STEPS, n, PHEROMONE_FACTOR, NUM_ANTS, DECAY);
+                for (int k = 0; k < n - 1; k++) {
+                    indexes[k] = k + 1;
+                }
+
+                TspBruteForce(indexes, costMatrix, 0, n - 1);
+                printf("[BruteForce] Best path cost: %f \n", shortestPathCost);
+                printf("[BruteForce] Best path: 0 -> ");
+                for (int k = 0; k < n - 1; k++)
+                    printf("%d -> ", shortestPath[k]);
+                puts("0");
+                memset(shortestPath, 0, sizeof(shortestPath));
+                shortestPathCost = -1;
+
+                TspGreedy(costMatrix, n);
+                
+
                 break;
             default:
                 break;
@@ -316,7 +497,7 @@ int main(int argc, char** argv) {
         if (n == 1)
             printf("| %20llu | %20.2f | %20.2f | %20.2f |\n", n, times[index], times[index] / times[index-1], n);
         else {
-            switch (test) {
+            switch (TEST) {
             case F_BRUTEFORCE:
                 printf("| %20llu | %20.2f | %20.2f | %20.2f |\n", n, times[index], times[index] / times[index - 1], pow(n,2)/pow(n-1,2));
                 break;
