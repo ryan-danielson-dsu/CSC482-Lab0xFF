@@ -11,6 +11,8 @@ enum Algs {
     F_BRUTEFORCE,
     F_GREEDY,
     F_ANTCOLONY,
+    F_ANTCOLONY_VS_EXACT,
+    F_GREEDY_VS_EXACT,
     F_ALL
 };
     
@@ -22,16 +24,16 @@ typedef struct Node {
 #define VERBOSE true
 #define SHOWTABLE false
 
-const int TEST = F_GREEDY;
+const int TEST = F_GREEDY_VS_EXACT;
 const int TIME_STEPS = 1000;
-const int NUM_ANTS = 1000;
-const float DECAY = .01;
+const int NUM_ANTS = 100;
+const float DECAY = 0.01;
 const float PHEROMONE_FACTOR = 1;
 const int RADIUS = 100;
 long long unsigned int busyCount;
 const long long int N_max = 1000; // adjust as needed, keep small for debugging
-const int N = 1000;
-const int C_MAXVAL = 10;
+const int N = 250;
+const int C_MAXVAL = 10000;
 double costMatrix[N_max][N_max] = { 0 };    /* Matrix associated with the weight of a path */
 int indexes[N_max] = { 0 };                 /* array associated with tracking indexes for creating unique brute force paths */
 Node coords[N_max] = { 0 };                 /* array for tracking X, Y values for Euclidean costMatrix */
@@ -173,8 +175,6 @@ void TspGreedy(double costMatrix[][N_max], int numV)
                     smallest = costMatrix[index][k];
                     tempIndex = k;
                 }
-                doBusyWork();
-
             }
         }
         index = tempIndex;
@@ -215,7 +215,7 @@ void TspAntColony(double costMatrix[][N_max], int timeSteps, int numV, float phe
     const int homeNode = 0;
     int currentNode = 0;
     int nextNode = 0;
-    int maxUnchangedTimeSteps = 20;
+    int maxUnchangedTimeSteps = 50;
     int unchangedTimeSteps = 0;
     double totalAttraction = 0;
     double cummulativeProbability = 0;
@@ -224,26 +224,29 @@ void TspAntColony(double costMatrix[][N_max], int timeSteps, int numV, float phe
     double edgeSelectionProbability = 0;
 
 
-    for (int step = 0; step < timeSteps; step++) {
-        if (unchangedTimeSteps > maxUnchangedTimeSteps)
+    for (long long int step = 0; step < timeSteps; step++) {
+        if (unchangedTimeSteps > maxUnchangedTimeSteps) {
             break;
 
+        }
         memset(newPheromoneMatrix, 0, sizeof(newPheromoneMatrix));
 
-        for (int j = 0; j < m; j++) {
-            /* upkeep for those lil' ants */
+        for (long long int j = 0; j < m; j++) {
+            /* upkeep for those ants */
             pathCost = 0;
             currentPath[0] = homeNode;
             memset(visited, 0, sizeof(visited));
             visited[homeNode] = 1;
+            
+            doBusyWork();
 
             
             if (step > 0) {
                 for (int k = 1; k < numV; k++) {
-                    currentNode = currentPath[k-1];
+                    currentNode = currentPath[k - 1];
                     totalAttraction = 0;
-                   
-                    for (nextNode = 0; nextNode < numV-1; nextNode++) {
+
+                    for (nextNode = 0; nextNode < numV - 1; nextNode++) {
                         if (!visited[nextNode] && nextNode != currentNode) {
                             if (costMatrix[currentNode][nextNode] > 0.0) {
                                 totalAttraction += (1 + pheromoneMatrix[currentNode][nextNode]) / costMatrix[currentNode][nextNode];
@@ -255,16 +258,16 @@ void TspAntColony(double costMatrix[][N_max], int timeSteps, int numV, float phe
                     double q = (double)rand() / (double)RAND_MAX;
                     cummulativeProbability = 0;
 
-                    for (nextNode = 0; nextNode < numV-1; nextNode++) {
+                    for (nextNode = 0; nextNode < numV - 1; nextNode++) {
                         if (!visited[nextNode] && nextNode != currentNode) {
                             if (costMatrix[currentNode][nextNode] > 0.0 && totalAttraction > 0) {
                                 edgeSelectionProbability = ((1 + pheromoneMatrix[currentNode][nextNode]) / costMatrix[currentNode][nextNode]) / totalAttraction;
                                 cummulativeProbability += edgeSelectionProbability;
-                            } 
+                            }
                             else {
                                 edgeSelectionProbability = (1 / costMatrix[currentNode][nextNode]) / totalAttraction;
                                 cummulativeProbability += edgeSelectionProbability;
-                            }  
+                            }
                         }
                         if (q < cummulativeProbability)
                             break;
@@ -275,7 +278,7 @@ void TspAntColony(double costMatrix[][N_max], int timeSteps, int numV, float phe
             }
 
             /* update path cost for new path */
-            for (int u = 0; u < numV-1; u++)
+            for (long long int u = 0; u < numV-1; u++)
                 pathCost += costMatrix[currentPath[u]][currentPath[u + 1]];
             pathCost += costMatrix[currentPath[numV-1]][homeNode];
 
@@ -288,8 +291,8 @@ void TspAntColony(double costMatrix[][N_max], int timeSteps, int numV, float phe
                 unchangedTimeSteps++;
             } 
 
-            /* add new pheremone for path */
-            for (int n = 0; n < numV-1; n++) {
+            /* add new pheromone for path */
+            for (long long int n = 0; n < numV-1; n++) {
                 currentNode = currentPath[n];
                 nextNode = currentPath[(n+1) % numV];
                 newPheromoneMatrix[currentNode][nextNode] = (newPheromoneMatrix[currentNode][nextNode] + pheromoneFactor) / pathCost;
@@ -297,9 +300,9 @@ void TspAntColony(double costMatrix[][N_max], int timeSteps, int numV, float phe
          
         }
 
-        /* decay pheremone matrix */
-        for (int k = 0; k < numV-1; k++) {
-            for (int h = 0; h < numV-1; h++) {
+        /* decay pheromone matrix */
+        for (long long int k = 0; k < numV-1; k++) {
+            for (long long int h = 0; h < numV-1; h++) {
                 pheromoneMatrix[k][h] = pheromoneMatrix[k][h] * decayFactor;
                 pheromoneMatrix[k][h] = pheromoneMatrix[k][h] + newPheromoneMatrix[k][h];
             }
@@ -432,7 +435,7 @@ unsigned long long int factorial(unsigned int n)
 int main(int argc, char** argv) {
 
     double trialsTime_max = .250; // in seconds
-    long long int trialsCount_max = 1000000,
+    long long int trialsCount_max = 1,// 1000000,
         N_min = 1,
         trial;
     clock_t splitTimeStamp, trialSetStart;
@@ -455,8 +458,8 @@ int main(int argc, char** argv) {
 
         /* test matrix */
 
-      //  GenerateRandomEuclideanCostMatrix(costMatrix, n, C_MAXVAL);
-        GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
+       // GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
+       // GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
 
 
 
@@ -473,6 +476,56 @@ int main(int argc, char** argv) {
 
 
             switch (TEST) {
+            case F_GREEDY_VS_EXACT:
+                for (int sqrTrials = 0; sqrTrials < 10; sqrTrials++) {
+                    GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+
+                    if (!SHOWTABLE && VERBOSE) {
+                        puts("+---------------------------------------------------------------------------------------------+");
+                        printf("N: %d\n", n);
+                        puts("+---------------------------------------------------------------------------------------------+");
+                    }
+                    for (int k = 0; k < n - 1; k++) {
+                        indexes[k] = k + 1;
+                    }
+
+                    TspBruteForce(indexes, costMatrix, 0, n - 1);
+                    printf("[BruteForce] Best path cost: %f \n", shortestPathCost);
+                    printf("[BruteForce] Best path: 0 -> ");
+                    for (int k = 0; k < n - 1; k++)
+                        printf("%d -> ", shortestPath[k]);
+                    puts("0");
+
+                    memset(shortestPath, 0, sizeof(shortestPath));
+                    shortestPathCost = -1;
+                    TspGreedy(costMatrix, n);
+                }
+                break;
+            case F_ANTCOLONY_VS_EXACT:
+                for (int sqrTrials = 0; sqrTrials < 10; sqrTrials++) {
+                    GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                    if (!SHOWTABLE && VERBOSE) {
+                        puts("+---------------------------------------------------------------------------------------------+");
+                        printf("N: %d\n", n);
+                        puts("+---------------------------------------------------------------------------------------------+");
+                    }
+                    for (int k = 0; k < n - 1; k++) {
+                        indexes[k] = k + 1;
+                    }
+
+                    TspBruteForce(indexes, costMatrix, 0, n - 1);
+                    printf("[BruteForce] Best path cost: %f \n", shortestPathCost);
+                    printf("[BruteForce] Best path: 0 -> ");
+                    for (int k = 0; k < n - 1; k++)
+                        printf("%d -> ", shortestPath[k]);
+                    puts("0");
+
+                    memset(shortestPath, 0, sizeof(shortestPath));
+                    shortestPathCost = -1;
+                    TspAntColony(costMatrix, TIME_STEPS, n, PHEROMONE_FACTOR, NUM_ANTS, DECAY);
+
+                }
+                break;
             case F_BRUTEFORCE:
                 for (int k = 0; k < n - 1; k++) {
                     indexes[k] = k + 1;
@@ -499,7 +552,8 @@ int main(int argc, char** argv) {
                 break;
             case F_GREEDY:
                 TspGreedy(costMatrix, n);
-
+                if (!SHOWTABLE && VERBOSE)
+                    puts("+---------------------------------------------------------------------------------------------+");
                 break;
             case F_ANTCOLONY:
                 TspAntColony(costMatrix, TIME_STEPS, n, PHEROMONE_FACTOR, NUM_ANTS, DECAY);
@@ -508,6 +562,7 @@ int main(int argc, char** argv) {
 
                 /* This case only exists for side by side algorithm comparisons */
                 GenerateRandomEuclideanCostMatrix(costMatrix, n, C_MAXVAL);
+
                 printf("+-------------------------\n");
                 TspAntColony(costMatrix, TIME_STEPS, n, PHEROMONE_FACTOR, NUM_ANTS, DECAY);
                
@@ -599,7 +654,7 @@ int main(int argc, char** argv) {
                     printf("| %20llu | %20.6f | %20.6f | %20.6f |\n", n, times[index], times[index] / times[index - 1], pow(n, 2)/pow(n-1,2));
                     break;
                 case F_ANTCOLONY:
-                    printf("| %20llu | %20.6f | %20.6f | %20.6f |\n", n, times[index], times[index] / times[index - 1], 2);
+                    printf("| %20llu | %20.6f | %20.6f | %20.6f |\n", n, times[index], times[index] / times[index - 1], pow(n-1, 2) / pow(n - 2, 2));
                     break;
                 default:
                     break;
