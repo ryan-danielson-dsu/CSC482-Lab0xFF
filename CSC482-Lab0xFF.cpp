@@ -19,17 +19,18 @@ typedef struct Node {
     double y;
 } Node;
 
-#define VERBOSE false
+#define VERBOSE true
+#define SHOWTABLE false
 
-
-const int TEST = F_BRUTEFORCE;
-const int TIME_STEPS = 100;
+const int TEST = F_GREEDY;
+const int TIME_STEPS = 1000;
 const int NUM_ANTS = 1000;
 const float DECAY = .01;
 const float PHEROMONE_FACTOR = 1;
+const int RADIUS = 100;
 long long unsigned int busyCount;
 const long long int N_max = 1000; // adjust as needed, keep small for debugging
-const int N = 10;
+const int N = 1000;
 const int C_MAXVAL = 10;
 double costMatrix[N_max][N_max] = { 0 };    /* Matrix associated with the weight of a path */
 int indexes[N_max] = { 0 };                 /* array associated with tracking indexes for creating unique brute force paths */
@@ -43,14 +44,15 @@ using namespace std;
 void doBusyWork(void)
 {
     for (int k = 0; k < N; k++)
-        busyCount++;
+        for (int j = 0; j < N; j++)
+            busyCount++;
 }
 
 void printMatrix(double costMatrix[][N_max], long long int numV)
 {
     for (long long i = 0; i < numV; i++) {
         for (long long k = 0; k < numV; k++) {
-            printf("%5.2f", costMatrix[i][k]);
+            printf("%8.2f", costMatrix[i][k]);
         }
         printf("\n\n");
     }
@@ -84,14 +86,11 @@ void TspBruteForce(int indexes[N_max], double costMatrix[][N_max], int l, int r)
         int index = 0;
 
         while (iteration <= r) {
-            if (VERBOSE)
-                printf("%3d ", indexes[iteration]);
             cost += costMatrix[index][indexes[iteration]];
             index = indexes[iteration];
             iteration++;
         }
-        if (VERBOSE)
-            printf("Total cost: %f\n\n", cost);
+
         if (shortestPathCost < 0) {
             shortestPathCost = cost;
             memcpy(shortestPath, indexes, sizeof(indexes)*r);
@@ -174,6 +173,8 @@ void TspGreedy(double costMatrix[][N_max], int numV)
                     smallest = costMatrix[index][k];
                     tempIndex = k;
                 }
+                doBusyWork();
+
             }
         }
         index = tempIndex;
@@ -190,6 +191,7 @@ void TspGreedy(double costMatrix[][N_max], int numV)
         acc++;   
     }
     cost += costMatrix[pathIndex][0];
+
 
     if (VERBOSE) {
         printf("[Greedy]     Best path cost: %f\n", cost);
@@ -351,29 +353,93 @@ void GenerateRandomEuclideanCostMatrix(double costMatrix[][N_max], int numV, int
 
 void GenerateRandomCircularGraphCostMatrix(double costMatrix[][N_max], int numV, int maxValue, int radius)
 {
-    double stepAngle;
-    for (int s = 0; s < numV; s++) {
-        stepAngle = 2 * M_PI / numV;
+    double stepAngle = 2 * M_PI / numV;
+    int nextNode;
+    Node temp;
+    int used[numV] = { 0 };
+    int bestPath[numV] = { 0 };
+
+
+    /* Create the coords by step */
+    for (long long int s = 0; s < numV; s++) {
         coords[s].x = radius * sin(s * stepAngle);
         coords[s].y = radius * cos(s * stepAngle);
+    }
 
+    
+
+    /* best path will be 0,1,2,3...N-1,N before shuffle */
+    for (long long int k = 0; k < numV; k++)
+        bestPath[k] = k;
+
+    /*shuffle the coordinate indexes around */
+    
+    for (long long int s = 1; s < numV/2; s+=2) {
+        nextNode = 1 + (rand() % numV - 1);
+        while (used[nextNode] >= 1 || nextNode == 0 || s == nextNode) {
+            nextNode = 1 + (rand() % numV - 1);
+        }
+
+        temp = coords[nextNode];
+        coords[nextNode] = coords[s];
+        coords[s] = temp; 
+
+        swap(bestPath[nextNode], bestPath[s]);
+
+        used[nextNode]++;
+        used[s]++;
+    }  
+
+    double shortestDistance = -1;
+    /* calculate distances and populate costMatrix */
+    for (long long int l = 0; l < numV; l++) {
+        for (long long int m = 0; m < numV; m++) {
+            if (l != m) {
+                costMatrix[l][m] = sqrt(pow(coords[m].x - coords[l].x, 2) + pow(coords[m].y - coords[l].y, 2));
+                if (costMatrix[l][m] < shortestDistance || shortestDistance == -1)
+                    shortestDistance = costMatrix[l][m];
+            }
+        }
+    }
+
+    /* Output for testing(comparison purposes */
+    if (VERBOSE) {
+        printf("\nBest path: ");
+        for (long long int k = 0; k < numV; k++) {
+            printf("%d -> ", bestPath[k]);
+        }
+        printf("0\n");
+
+        printf("Best path coords: ");
+        for (long long int k = 0; k < numV - 1; k++)
+            printf("(%.2f,%.2f) -> ", coords[k].x, coords[k].y);
+        printf("(%.2f,%.2f)\n", coords[numV].x, coords[numV].y);
+
+        printf("Expected Cost: (%f * %d) = %f\n\n", shortestDistance, numV, (double)(shortestDistance * numV));
     }
 }
 
+unsigned long long int factorial(unsigned int n)
+{
+    unsigned long long int res = 1;
+    for (unsigned long long int i = 2; i <= n; i++)
+        res *= i;
+    return res;
+}
 
 
 
 int main(int argc, char** argv) {
 
     double trialsTime_max = .250; // in seconds
-    long long int trialsCount_max = 1,// 1000000,
+    long long int trialsCount_max = 1000000,
         N_min = 1,
         trial;
     clock_t splitTimeStamp, trialSetStart;
     const long long  Array_max = 100000000;
     double splitTime, trialSetCount, trialSetTime, dummySetCount, dummySetTime, averageTrialTime, averageDummyTrialTime, estimatedTimePerTrial;
 
-    double times[100] = { 0 };
+    double times[N_max] = { 0 };
     int index = 1;
     srand(time(NULL));
 
@@ -384,14 +450,14 @@ int main(int argc, char** argv) {
     // power of 2 | N | Measured Time | Measured Doubling Ratio | Expected Doubling Ratio |Busy Count | Measured Time / Busy Count
     // For each size N of input we want to test -- typically start N at 1 and double each repetition
     //for (long long int n=1; n<N_max; n=2*n ) {
-    for (long long int n = 4; n < N_max; n++) {
+    for (long long int n = 3; n < N_max; n++) {
         /********* any preparations, test input generation, to be used for entire trial set ********/
 
         /* test matrix */
 
-        GenerateRandomEuclideanCostMatrix(costMatrix, n, C_MAXVAL);
-        if (VERBOSE)
-            printMatrix(costMatrix, n);
+      //  GenerateRandomEuclideanCostMatrix(costMatrix, n, C_MAXVAL);
+        GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
+
 
 
         splitTime = 0.0;
@@ -415,20 +481,25 @@ int main(int argc, char** argv) {
                 TspBruteForce(indexes, costMatrix, 0, n - 1);
 
                 if (VERBOSE) {
-                    printf("Shortest Path: ");
+                    printf("BrutForce shortest Path: 0 -> ");
                     for (int k = 0; k < n; k++) {
                         if (k == n - 1)
-                            printf("%d\n\n", shortestPath[k]);
+                            printf("%d\n", shortestPath[k]);
                         else
                             printf("%d -> ", shortestPath[k]);
                     }
-                    printf("Shortest Path Cost: %f\n", shortestPathCost);
+                    printf("BruteForce shortest Path Cost: %f\n\n", shortestPathCost);
+                    printMatrix(costMatrix, n);
+                    if (!SHOWTABLE)
+                        puts("+---------------------------------------------------------------------------------------------+");
                 }
+
                 shortestPathCost = -1;
                 memset(shortestPath, 0, sizeof(shortestPath));
                 break;
             case F_GREEDY:
                 TspGreedy(costMatrix, n);
+
                 break;
             case F_ANTCOLONY:
                 TspAntColony(costMatrix, TIME_STEPS, n, PHEROMONE_FACTOR, NUM_ANTS, DECAY);
@@ -517,22 +588,22 @@ int main(int argc, char** argv) {
         estimatedTimePerTrial = averageTrialTime - averageDummyTrialTime; // should be a decent measurement of time taken to run your algorithm
 
         times[index] = estimatedTimePerTrial;
-
-        if (n == 1)
-            printf("| %20llu | %20.2f | %20.2f | %20.2f |\n", n, times[index], times[index] / times[index-1], n);
-        else {
-            switch (TEST) {
-            case F_BRUTEFORCE:
-                printf("| %20llu | %20.2f | %20.2f | %20.2f |\n", n, times[index], times[index] / times[index - 1], pow(n,2)/pow(n-1,2));
-                break;
-            case F_GREEDY:
-                printf("| %20llu | %20.2f | %20.2f | %20.2f |\n", n, times[index], times[index] / times[index - 1], 2);
-                break;
-            case F_ANTCOLONY:
-                printf("| %20llu | %20.2f | %20.2f | %20.2f |\n", n, times[index], times[index] / times[index - 1], 2);
-                break;
-            default:
-                break;
+        
+        if (SHOWTABLE) {
+            if (n > 3) {
+                switch (TEST) {
+                case F_BRUTEFORCE:
+                    printf("| %20llu | %20.6f | %20.6f | %20.6f |\n", n, times[index], times[index] / times[index - 1], (double)(factorial(n)/factorial(n-1)));
+                    break;
+                case F_GREEDY:
+                    printf("| %20llu | %20.6f | %20.6f | %20.6f |\n", n, times[index], times[index] / times[index - 1], pow(n, 2)/pow(n-1,2));
+                    break;
+                case F_ANTCOLONY:
+                    printf("| %20llu | %20.6f | %20.6f | %20.6f |\n", n, times[index], times[index] / times[index - 1], 2);
+                    break;
+                default:
+                    break;
+                }
             }
         }
         index++;
