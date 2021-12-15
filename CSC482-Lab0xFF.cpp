@@ -23,6 +23,7 @@ typedef struct Node {
 
 #define VERBOSE true
 #define SHOWTABLE false
+#define EUCLIDEAN false
 
 const int TEST = F_GREEDY_VS_EXACT;
 const int TIME_STEPS = 1000;
@@ -53,9 +54,8 @@ void doBusyWork(void)
 void printMatrix(double costMatrix[][N_max], long long int numV)
 {
     for (long long i = 0; i < numV; i++) {
-        for (long long k = 0; k < numV; k++) {
+        for (long long k = 0; k < numV; k++)
             printf("%8.2f", costMatrix[i][k]);
-        }
         printf("\n\n");
     }
     printf("\n\n");
@@ -100,11 +100,8 @@ void TspBruteForce(int indexes[N_max], double costMatrix[][N_max], int l, int r)
             shortestPathCost = cost;
             memcpy(shortestPath, indexes, sizeof(indexes)*r);
         }
-    }
-    else
-    {
-        for (i = l; i < r; i++)
-        {
+    } else {
+        for (i = l; i < r; i++) {
             swap((indexes[l]), (indexes[i]));
             TspBruteForce(indexes, costMatrix, l + 1, r);
             swap((indexes[l]), (indexes[i]));
@@ -137,11 +134,8 @@ void TspBruteForceWorstCase(int indexes[N_max], double costMatrix[][N_max], int 
             shortestPathCost = cost;
             memcpy(shortestPath, indexes, sizeof(indexes) * r);
         }
-    }
-    else
-    {
-        for (i = l; i < r; i++)
-        {
+    } else {
+        for (i = l; i < r; i++) {
             swap((indexes[l]), (indexes[i]));
             TspBruteForceWorstCase(indexes, costMatrix, l + 1, r);
             swap((indexes[l]), (indexes[i]));
@@ -149,23 +143,24 @@ void TspBruteForceWorstCase(int indexes[N_max], double costMatrix[][N_max], int 
     }
 }
 
-/* Greedy algorithm takes the shortest available path from any given node, regardless of where
+/* 
+ * Greedy algorithm takes the shortest available path from any given node, regardless of where
  * this may lead us.
  */
 
 void TspGreedy(double costMatrix[][N_max], int numV)
 {
     /*
-        find shortest, check if index is already used, if not use as next index
-    */
+     *   find shortest, check if index is already used, if not use as next index
+     */
 
     double smallest = C_MAXVAL + 1;
     int index = 0;
     int tempIndex = 0;
-    int visited[numV+1] = { 0 };
-    int path[numV+1] = { 0 };
+    int visited[numV + 1] = { 0 };
+    int path[numV + 1] = { 0 };
     
-    
+    /* visit home node default */
     visited[0]++;
 
     for (long long int j = 0; j < numV - 1; j++) {
@@ -379,9 +374,8 @@ void GenerateRandomCircularGraphCostMatrix(double costMatrix[][N_max], int numV,
     
     for (long long int s = 1; s < numV/2; s+=2) {
         nextNode = 1 + (rand() % numV - 1);
-        while (used[nextNode] >= 1 || nextNode == 0 || s == nextNode) {
+        while (used[nextNode] >= 1 || nextNode == 0 || s == nextNode)
             nextNode = 1 + (rand() % numV - 1);
-        }
 
         temp = coords[nextNode];
         coords[nextNode] = coords[s];
@@ -458,10 +452,6 @@ int main(int argc, char** argv) {
 
         /* test matrix */
 
-       // GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
-       // GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
-
-
 
         splitTime = 0.0;
         // get timestamp before set of trials are run:
@@ -478,7 +468,10 @@ int main(int argc, char** argv) {
             switch (TEST) {
             case F_GREEDY_VS_EXACT:
                 for (int sqrTrials = 0; sqrTrials < 10; sqrTrials++) {
-                    GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                    if (EUCLIDEAN)
+                        GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                    else
+                        GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
 
                     if (!SHOWTABLE && VERBOSE) {
                         puts("+---------------------------------------------------------------------------------------------+");
@@ -503,7 +496,11 @@ int main(int argc, char** argv) {
                 break;
             case F_ANTCOLONY_VS_EXACT:
                 for (int sqrTrials = 0; sqrTrials < 10; sqrTrials++) {
-                    GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                    if (EUCLIDEAN)
+                        GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                    else
+                        GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
+
                     if (!SHOWTABLE && VERBOSE) {
                         puts("+---------------------------------------------------------------------------------------------+");
                         printf("N: %d\n", n);
@@ -527,6 +524,11 @@ int main(int argc, char** argv) {
                 }
                 break;
             case F_BRUTEFORCE:
+                if (EUCLIDEAN)
+                    GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                else
+                    GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
+
                 for (int k = 0; k < n - 1; k++) {
                     indexes[k] = k + 1;
                 }
@@ -551,17 +553,30 @@ int main(int argc, char** argv) {
                 memset(shortestPath, 0, sizeof(shortestPath));
                 break;
             case F_GREEDY:
+                if (EUCLIDEAN)
+                    GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                else
+                    GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
+
                 TspGreedy(costMatrix, n);
                 if (!SHOWTABLE && VERBOSE)
                     puts("+---------------------------------------------------------------------------------------------+");
                 break;
             case F_ANTCOLONY:
+                if (EUCLIDEAN)
+                    GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                else
+                    GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
+
                 TspAntColony(costMatrix, TIME_STEPS, n, PHEROMONE_FACTOR, NUM_ANTS, DECAY);
                 break;
             case F_ALL:
 
                 /* This case only exists for side by side algorithm comparisons */
-                GenerateRandomEuclideanCostMatrix(costMatrix, n, C_MAXVAL);
+                if (EUCLIDEAN)
+                    GenerateRandomEuclideanCostMatrix(costMatrix, n, RADIUS);
+                else
+                    GenerateRandomCircularGraphCostMatrix(costMatrix, n, C_MAXVAL, RADIUS);
 
                 printf("+-------------------------\n");
                 TspAntColony(costMatrix, TIME_STEPS, n, PHEROMONE_FACTOR, NUM_ANTS, DECAY);
@@ -595,7 +610,6 @@ int main(int argc, char** argv) {
                 shortestPathCost = -1;
 
                 TspGreedy(costMatrix, n);
-                
 
                 break;
             default:
